@@ -51,7 +51,6 @@ target.wifi.ssid=你的办公WiFi名称
 
 Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。正式发布请使用自己的签名配置；签名文件和密码配置已加入忽略规则。
 
-新包名为 `com.xiami.checkin`，会作为独立 App 安装。首次打开需要重新授权、确认目标 WiFi 和提醒时间。迁移使用时请关闭旧版助手的监控，避免重复提醒。
 
 ## 手机设置
 
