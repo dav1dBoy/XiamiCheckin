@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="216" height="216" viewBox="0 0 108 108" role="img" aria-label="虾米爱打卡：时钟与打卡勾选">
+  <rect width="108" height="108" rx="26" fill="#F07850"/>
+  <circle cx="54" cy="54" r="26" fill="none" stroke="#fff" stroke-width="5"/>
+  <path d="M54 38V54L43 62" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="72" cy="72" r="13" fill="#166956"/>
+  <path d="m66 72 4 4 8-8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

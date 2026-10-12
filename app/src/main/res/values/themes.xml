@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.FeishuAlarm" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.XiamiCheckIn" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- 必须是不透明的普通窗口，让被遮住的飞书页面进入后台。 -->
+    <style name="Theme.XiamiCheckIn.Launch" parent="Theme.XiamiCheckIn">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
 </resources>

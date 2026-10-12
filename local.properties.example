@@ -1,0 +1,3 @@
+# Copy target.wifi.ssid into your local.properties (ignored by Git).
+# Android Studio creates sdk.dir for this computer automatically.
+target.wifi.ssid=YOUR_WIFI_SSID

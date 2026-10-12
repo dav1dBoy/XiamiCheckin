@@ -1,76 +1,88 @@
-# 飞书牛马助手（FeishuAlarm）
+<p align="center">
+  <img src="docs/logo.svg" width="112" alt="虾米爱打卡图标" />
+</p>
 
-基于定时提醒与 **目标 WiFi（SSID）** 判定的 Android 小工具：在设定的工作日时间点，若手机已连接指定 WiFi，则自动唤起飞书（Lark）；否则通过通知与前台服务等待连上目标网络后再唤起。不依赖 Google Play 服务。
+# 虾米爱打卡 · XiamiCheckIn
 
-## 功能说明
+一个基于工作日时间提醒和目标 WiFi 判断的 Android 打卡助手。到达设定时间并连接指定 WiFi 后，自动打开飞书；未连接时等待网络，锁屏时提醒并等待解锁。
 
-- **多组监控时间**：在应用内添加/删除时间点（`HH:mm`），使用 `AlarmManager` 在每天对应时刻触发；**周六、周日不执行**闹钟逻辑（仍会处理开机等广播以维持调度）。
-- **默认时间点**：首次进入且列表中不含 `09:15` 时，会自动加入 `09:15` 与 `18:50` 两个默认时间（见 `MainActivity`）。
-- **打卡条件（当前实现）**：到达设定时间后，若当前 WiFi 的 SSID 与代码中的目标一致，则进入「打开飞书」流程；否则发送「请连接目标 WiFi」类通知，并启动前台服务内的 **WiFi 网络监听**，连上目标 SSID 后再执行同一套打开逻辑。
-- **锁屏与解锁**：若已满足 WiFi 条件但设备仍处于锁屏，会发送高优先级提醒通知，并记录「待打开飞书」标记；用户解锁后由 `ACTION_USER_PRESENT` 广播触发自动打开飞书。
-- **立即打开飞书**：主界面提供按钮，直接尝试启动包名为 `com.ss.android.lark` 的飞书客户端。
-- **前台服务**：使用 `foregroundServiceType="specialUse"`（Android 14+ 适配），降低后台被系统回收的概率；等待 WiFi 时通知上提供「关闭监控」操作。
-- **开机自恢复**：监听 `BOOT_COMPLETED`，重新注册所有闹钟。
+| 项目 | 信息 |
+| --- | --- |
+| App 名称 | 虾米爱打卡 |
+| 工程 / 建议仓库名 | `XiamiCheckIn` |
+| Android 包名 | `com.xiami.checkin` |
+| 版本 | `1.0.0` |
+| 支持系统 | Android 8.0（API 26）及以上 |
 
-## 目标 WiFi 如何修改
+## 功能
 
-目标 SSID 写死在 `WifiNetworkHelper` 中：
+- 添加、删除多个提醒时间，周六、周日跳过。
+- 通过系统分钟广播 `TIME_TICK` / 时间变更广播检查当前时间，同一时间点每天最多触发一次。
+- 当前主界面初始化时，若列表不含 `09:15`，会补入 `09:15` 与 `18:50`。
+- 连接目标 WiFi 后打开飞书；未连接时通过前台服务等待，并提供「关闭监控」操作。
+- 锁屏时记录待打开状态，解锁后继续。
+- 打开飞书前先显示不透明过渡页，获得焦点后等待约 1.5 秒，再切回飞书，处理飞书原本就在前台的情况。
+- 定时触发、通知点击、解锁和「立即打开飞书」使用同一唤起流程。
+- 橙色时钟图标、独立通知图标及 Android 13 主题图标。
 
-```kotlin
-const val TARGET_SSID = "candymobi"
+## 配置目标 WiFi
+
+把以下配置添加到工程根目录的 `local.properties`，保留 Android Studio 自动生成的 `sdk.dir`：
+
+```properties
+target.wifi.ssid=你的办公WiFi名称
 ```
 
-请按实际办公网络名称修改该常量并重新编译安装。
+参考文件为 [`local.properties.example`](local.properties.example)。配置修改后需要重新构建安装。此文件按 UTF-8 读取，支持中文 WiFi 名称；反斜杠按 Java Properties 规则写作 `\\`。
 
-## 权限与系统设置说明
+`local.properties` 已被 Git 忽略，仓库中不保存你的实际 WiFi 名称。没有配置时，构建使用占位值 `YOUR_WIFI_SSID`。WiFi 名称会写入生成的 APK，分享 APK 时请使用适合公开的配置。
 
-| 权限 / 能力 | 用途 |
-|-------------|------|
-| `ACCESS_FINE_LOCATION` | Android 读取当前 WiFi SSID 的常规前置条件之一（与系统策略相关）。 |
-| `ACCESS_BACKGROUND_LOCATION` | 在后台仍能读取 WiFi 信息时使用（应用内会引导用户改为「始终允许」等）。 |
-| `NEARBY_WIFI_DEVICES`（Android 13+，`neverForLocation`） | 符合新规下与 WiFi/附近设备相关的声明。 |
-| `POST_NOTIFICATIONS` | 发送打卡与等待 WiFi 等通知。 |
-| `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` | 尽量在允许时注册精确闹钟。 |
-| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_SPECIAL_USE` | 前台服务类型声明。 |
-| `RECEIVE_BOOT_COMPLETED` | 开机后恢复闹钟。 |
-| `WAKE_LOCK` | 提醒时短暂点亮屏幕等。 |
-| `SYSTEM_ALERT_WINDOW` | 应用会检查并引导开启「在其他应用上层显示」，用于部分机型上辅助唤起场景。 |
-| `INTERNET` / `ACCESS_NETWORK_STATE` / `ACCESS_WIFI_STATE` | 网络与 WiFi 状态相关能力。 |
+## 构建与运行
 
-**重要**：为稳定后台行为，请在系统设置中为该应用开启**自启动 / 后台运行 / 忽略电池优化**（名称因厂商而异），并确认 **系统定位服务已打开**；否则部分机型上 SSID 可能读不到（代码中会记录日志并提示无法读取 WiFi 名称）。
-
-## 技术栈与版本
-
-- **语言**：Kotlin **2.2.10**
-- **构建**：Android Gradle Plugin **9.1.0**（Version Catalog：`gradle/libs.versions.toml`）
-- **SDK**：`minSdk` **26**，`compileSdk` / `targetSdk` **35**
-- **UI**：Jetpack **Compose** + **Material 3**（`composeBom` 见 `libs.versions.toml`）
-- **核心组件**：`AlarmManager`、`BroadcastReceiver`（`AlarmReceiver`）、前台 `Service`（`AlarmService`）、`ConnectivityManager.NetworkCallback`（监听 WiFi 连接变化）
-
-## 本地构建
-
-1. 安装 **Android Studio**（建议支持 AGP 9.x 的版本）与 **JDK 11**（工程 `compileOptions` 为 Java 11）。
-2. 克隆工程后，用 Android Studio 打开根目录，同步 Gradle。
-3. 修改 `WifiNetworkHelper.TARGET_SSID` 为你的目标 WiFi 名称（若与默认不同）。
-4. 运行 **app** 模块到真机（闹钟、WiFi SSID、锁屏与厂商限制建议在真机上验证）。
-
-命令行示例（需本机已配置 Android SDK）：
+- JDK **21**（Gradle 运行环境）；Java 源码兼容目标为 11。
+- Android SDK **35**。
+- Gradle **9.3.1**、Android Gradle Plugin **9.1.0**。
+- Jetpack Compose / Material 3；Compose 编译插件版本见 `gradle/libs.versions.toml`。
 
 ```bash
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:lintDebug
 ```
 
-## 工程结构（简要）
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。正式发布请使用自己的签名配置；签名文件和密码配置已加入忽略规则。
 
-- `app/src/main/java/com/ai/feishualarm/ui/page/MainActivity.kt` — Compose 主界面、权限引导、闹钟列表与飞书按钮。
-- `app/.../helper/AlarmHelper.kt` — 闹钟时间的持久化与 `AlarmManager` 调度。
-- `app/.../receiver/AlarmReceiver.kt` — 闹钟与开机广播，工作日判断与 WiFi 检查入口。
-- `app/.../service/AlarmService.kt` — 前台服务、等待目标 WiFi 的网络回调与通知更新。
-- `app/.../helper/WifiNetworkHelper.kt` — 目标 SSID、SSID 读取与权限/定位服务检查。
-- `app/.../helper/AlarmActionHandler.kt` — 通知渠道、锁屏提醒、唤醒屏幕与打开飞书流程协调。
-- `app/.../helper/FeishuLauncher.kt` — 通过包名 `com.ss.android.lark` 启动飞书。
-- `app/.../receiver/UnlockReceiver.kt` — 解锁后消费「待打开飞书」标记并启动飞书。
+新包名为 `com.xiami.checkin`，会作为独立 App 安装。首次打开需要重新授权、确认目标 WiFi 和提醒时间。迁移使用时请关闭旧版助手的监控，避免重复提醒。
 
-## 免责声明
+## 手机设置
 
-本工具仅用于在本人设备上辅助唤起已安装的飞书客户端，不涉及对飞书服务端或打卡规则的破解或篡改。使用请遵守公司与飞书的使用条款，并自行承担因系统限制、权限或电池策略导致的提醒失败风险。
+根据系统提示授予通知、WiFi / 位置读取和后台位置权限，并开启系统定位服务。在系统设置中为「虾米爱打卡」允许后台运行、自启动及所需的悬浮窗权限，避免后台唤起被拦截。
+
+当前调度依赖应用进程接收分钟广播，前台服务有助于维持运行；进程被杀或设备休眠时仍可能错过时间点。Manifest 中的精确闹钟权限是现有声明，当前调度并未使用精确 `AlarmManager` 闹钟。
+
+## 工程结构
+
+```text
+app/src/main/java/com/xiami/checkin/
+├── helper/       # 时间、WiFi、通知及飞书唤起
+├── receiver/     # 提醒、开机与解锁广播
+├── service/      # 前台服务与 WiFi 等待
+└── ui/           # 主界面、过渡页和主题
+```
+
+- App 名称和通知文案：`app/src/main/res/values/strings.xml`
+- 包名与版本：`app/build.gradle.kts`
+- 工程名：`settings.gradle.kts`
+- 图标：`app/src/main/res/drawable/`、`mipmap-anydpi-v26/`、`mipmap-anydpi-v33/`
+- 品牌图：`docs/logo.svg`
+
+
+## 真机验证
+
+1. 连接目标 WiFi，将提醒设置为最近的工作日时间，让飞书保持前台。到点后应先显示过渡页，再返回飞书。
+2. 在飞书前台锁屏，等待提醒后解锁；通知点击也应经过过渡页。
+3. 在过渡页等待期间按 Home 或锁屏，不应在等待结束后突然拉起飞书。
+4. 从非目标 WiFi 切换到目标 WiFi，检查等待监控是否结束并进入唤起流程。
+5. 以飞书显示的实际考勤结果为准；助手不读取打卡结果，前后台切换也不保证打卡成功。请在普通全屏模式下验证。
+
+## 项目来源
+「飞书」及包名 `com.ss.android.lark` 指本工具唤起的第三方客户端。本项目是独立辅助工具，与飞书官方无隶属关系。

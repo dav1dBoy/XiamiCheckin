@@ -1,18 +1,33 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
+val localConfig = Properties().apply {
+    val configFile = rootProject.file("local.properties")
+    if (configFile.exists()) {
+        configFile.reader(Charsets.UTF_8).use { load(it) }
+    }
+}
+val targetWifiSsid = localConfig.getProperty("target.wifi.ssid")
+    ?.takeIf { it.isNotBlank() } ?: "YOUR_WIFI_SSID"
+val escapedWifiSsid = targetWifiSsid.replace("\\", "\\\\")
+    .replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
+
 android {
-    namespace = "com.ai.feishualarm"
+    namespace = "com.xiami.checkin"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ai.feishualarm"
+        applicationId = "com.xiami.checkin"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+
+        buildConfigField("String", "TARGET_WIFI_SSID", "\"$escapedWifiSsid\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -32,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

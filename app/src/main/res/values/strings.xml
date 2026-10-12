@@ -1,3 +1,6 @@
 <resources>
-    <string name="app_name">飞书牛马助手</string>
+    <string name="app_name">虾米爱打卡</string>
+    <string name="preparing_feishu">正在准备打开飞书…</string>
+    <string name="monitoring_title">虾米爱打卡 · 监控中</string>
+    <string name="monitoring_channel_name">虾米爱打卡后台监控</string>
 </resources>

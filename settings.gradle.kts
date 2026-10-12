@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FeishuAlarm"
+rootProject.name = "XiamiCheckIn"
 include(":app")

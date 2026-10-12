@@ -35,18 +35,26 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FeishuAlarm">
+        android:theme="@style/Theme.XiamiCheckIn">
         <activity
             android:name=".ui.page.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.FeishuAlarm">
+            android:theme="@style/Theme.XiamiCheckIn">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.page.FeishuLaunchActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:theme="@style/Theme.XiamiCheckIn.Launch" />
 
         <service
             android:name=".service.AlarmService"
@@ -55,7 +63,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Feishu alarm monitoring to prevent process death" />
+                android:value="Scheduled check-in reminders and target WiFi monitoring" />
         </service>
 
         <receiver
