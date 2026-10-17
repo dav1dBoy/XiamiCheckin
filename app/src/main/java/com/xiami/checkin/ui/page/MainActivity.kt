@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
@@ -41,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -52,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -133,6 +136,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             XiamiCheckInTheme {
                 var alarmTimes by remember { mutableStateOf(AlarmHelper.getAlarmTimes(this)) }
+                var weekendEnabled by remember {
+                    mutableStateOf(AlarmHelper.isWeekendEnabled(this))
+                }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -153,6 +159,11 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
                         alarmTimes = alarmTimes,
+                        weekendEnabled = weekendEnabled,
+                        onWeekendEnabledChange = { enabled ->
+                            AlarmHelper.setWeekendEnabled(this, enabled)
+                            weekendEnabled = enabled
+                        },
                         isWifiMonitoringActive = isWifiMonitoringActive,
                         onDeleteTime = { time ->
                             AlarmHelper.removeAlarmTime(this, time)
@@ -284,6 +295,8 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     modifier: Modifier = Modifier,
     alarmTimes: List<String>,
+    weekendEnabled: Boolean,
+    onWeekendEnabledChange: (Boolean) -> Unit,
     isWifiMonitoringActive: Boolean,
     onDeleteTime: (String) -> Unit,
     onOpenFeishu: () -> Unit,
@@ -312,7 +325,42 @@ fun MainScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "监控时间点 (排除周末):", fontSize = 16.sp, color = Color.Gray)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = weekendEnabled,
+                    role = Role.Switch,
+                    onValueChange = onWeekendEnabledChange
+                )
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.weekend_enabled_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = stringResource(
+                        if (weekendEnabled) R.string.weekend_enabled_summary
+                        else R.string.weekend_disabled_summary
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = weekendEnabled, onCheckedChange = null)
+        }
+
+        Text(
+            text = stringResource(
+                if (weekendEnabled) R.string.alarm_times_every_day
+                else R.string.alarm_times_weekdays
+            ),
+            fontSize = 16.sp,
+            color = Color.Gray
+        )
         LazyColumn(
             modifier = Modifier
                 .weight(1f)

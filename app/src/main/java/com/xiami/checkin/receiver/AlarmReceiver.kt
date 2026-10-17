@@ -24,7 +24,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val calendar = Calendar.getInstance()
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
 
-        if (dayOfWeek != Calendar.SUNDAY && dayOfWeek != Calendar.SATURDAY) {
+        if (AlarmHelper.isAlarmDay(context, dayOfWeek)) {
             val alarmTime = intent?.getStringExtra("ALARM_TIME") ?: ""
             if (alarmTime.isBlank()) {
                 Log.w("AlarmReceiver", "Missing ALARM_TIME, ignoring unexpected broadcast.")
@@ -33,9 +33,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 checkWifiAndHandle(context, alarmTime)
             }
         } else {
-            Log.d("AlarmReceiver", "It's weekend, skipping.")
-            //更新激活一下前台服务
-
+            Log.d("AlarmReceiver", "Weekend reminders disabled, skipping.")
         }
 
         AlarmHelper.scheduleAllAlarms(context)

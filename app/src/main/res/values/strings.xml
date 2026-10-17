@@ -3,4 +3,9 @@
     <string name="preparing_feishu">正在准备打开飞书…</string>
     <string name="monitoring_title">虾米爱打卡 · 监控中</string>
     <string name="monitoring_channel_name">虾米爱打卡后台监控</string>
+    <string name="weekend_enabled_title">周末也自动打开</string>
+    <string name="weekend_enabled_summary">周六、周日也按下方时间执行</string>
+    <string name="weekend_disabled_summary">仅周一至周五按下方时间执行</string>
+    <string name="alarm_times_every_day">监控时间点（每天）：</string>
+    <string name="alarm_times_weekdays">监控时间点（周一至周五）：</string>
 </resources>

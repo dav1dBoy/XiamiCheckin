@@ -16,6 +16,7 @@ import java.util.Locale
 object AlarmHelper {
     private const val PREFS_NAME = "AlarmPrefs"
     private const val ALARM_TIMES_KEY = "AlarmTimes"
+    private const val WEEKEND_ENABLED_KEY = "weekend_enabled"
     private const val LAST_FIRED_PREFIX = "last_fired_"
 
     private val dayKeyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -27,6 +28,20 @@ object AlarmHelper {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getStringSet(ALARM_TIMES_KEY, setOf())?.toList()?.sorted() ?: listOf()
     }
+
+    fun isWeekendEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(WEEKEND_ENABLED_KEY, false)
+
+    fun setWeekendEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(WEEKEND_ENABLED_KEY, enabled).apply()
+    }
+
+    // 分钟调度和广播入口共用日期规则，避免开启周末后仍被另一处拦截。
+    fun isAlarmDay(context: Context, dayOfWeek: Int): Boolean =
+        (dayOfWeek != Calendar.SATURDAY && dayOfWeek != Calendar.SUNDAY) ||
+            isWeekendEnabled(context)
 
     fun addAlarmTime(context: Context, time: String) {
         Log.i("AlarmHelper", "add Alarm: $time")
@@ -122,7 +137,7 @@ object AlarmHelper {
     private fun onClockEvent(appContext: Context) {
         val calendar = Calendar.getInstance()
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-        if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+        if (!isAlarmDay(appContext, dayOfWeek)) {
             return
         }
 
