@@ -2,32 +2,26 @@ package com.xiami.checkin.helper
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import com.xiami.checkin.receiver.AlarmReceiver
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import java.time.LocalDate
+import java.time.ZonedDateTime
 
 object AlarmHelper {
+    const val ACTION_ALARM = "com.xiami.checkin.action.ALARM"
+    const val EXTRA_ALARM_TIME = "ALARM_TIME"
+    const val EXTRA_TRIGGER_AT = "TRIGGER_AT"
     private const val PREFS_NAME = "AlarmPrefs"
     private const val ALARM_TIMES_KEY = "AlarmTimes"
     private const val WEEKEND_ENABLED_KEY = "weekend_enabled"
     private const val LAST_FIRED_PREFIX = "last_fired_"
 
-    private val dayKeyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-    private var timeTickReceiver: BroadcastReceiver? = null
-    private var timeTickRegistered = false
-
-    fun getAlarmTimes(context: Context): List<String> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getStringSet(ALARM_TIMES_KEY, setOf())?.toList()?.sorted() ?: listOf()
-    }
+    fun getAlarmTimes(context: Context): List<String> =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getStringSet(ALARM_TIMES_KEY, emptySet())?.toList()?.sorted().orEmpty()
 
     fun isWeekendEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -36,17 +30,17 @@ object AlarmHelper {
     fun setWeekendEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(WEEKEND_ENABLED_KEY, enabled).apply()
+        scheduleAllAlarms(context)
     }
 
-    // 分钟调度和广播入口共用日期规则，避免开启周末后仍被另一处拦截。
-    fun isAlarmDay(context: Context, dayOfWeek: Int): Boolean =
-        (dayOfWeek != Calendar.SATURDAY && dayOfWeek != Calendar.SUNDAY) ||
-            isWeekendEnabled(context)
+    fun canScheduleExactAlarms(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     fun addAlarmTime(context: Context, time: String) {
-        Log.i("AlarmHelper", "add Alarm: $time")
+        if (AlarmSchedule.parseTime(time) == null) return
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val times = prefs.getStringSet(ALARM_TIMES_KEY, setOf())?.toMutableSet() ?: mutableSetOf()
+        val times = getAlarmTimes(context).toMutableSet()
         if (times.add(time)) {
             prefs.edit().putStringSet(ALARM_TIMES_KEY, times).apply()
             scheduleAllAlarms(context)
@@ -55,125 +49,74 @@ object AlarmHelper {
 
     fun removeAlarmTime(context: Context, time: String) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val times = prefs.getStringSet(ALARM_TIMES_KEY, setOf())?.toMutableSet() ?: mutableSetOf()
+        val times = getAlarmTimes(context).toMutableSet()
         if (times.remove(time)) {
-            prefs.edit()
-                .putStringSet(ALARM_TIMES_KEY, times)
-                .remove(LAST_FIRED_PREFIX + time)
-                .apply()
-            cancelAlarm(context, time)
-            scheduleAllAlarms(context)
+            prefs.edit().putStringSet(ALARM_TIMES_KEY, times)
+                .remove(LAST_FIRED_PREFIX + time).apply()
+            cancelAlarm(context, time, ACTION_ALARM)
+            cancelAlarm(context, time, null)
         }
     }
 
-    /**
-     * 取消旧版 AlarmManager 的 PendingIntent，并注册/注销基于 [Intent.ACTION_TIME_TICK] 的分钟监听。
-     * 到点时向 [AlarmReceiver] 发送与原先一致的显式广播（携带 [ALARM_TIME]）。
-     */
+    /** 使用系统持有的 PendingIntent；进程退出后仍能在下一个时间点收到广播。 */
     fun scheduleAllAlarms(context: Context) {
-        val appCtx = context.applicationContext
-        val times = getAlarmTimes(appCtx)
-        for (time in times) {
-            cancelAlarm(appCtx, time)
-        }
-        if (times.isNotEmpty()) {
-            ensureTimeTickRegistered(appCtx)
-        } else {
-            maybeUnregisterTimeTick(appCtx)
-        }
-    }
-
-    private fun ensureTimeTickRegistered(appContext: Context) {
-        synchronized(this) {
-            if (timeTickRegistered) return
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(ctx: Context, intent: Intent?) {
-                    when (intent?.action) {
-                        Intent.ACTION_TIME_TICK,
-                        Intent.ACTION_TIME_CHANGED -> onClockEvent(ctx.applicationContext)
-                    }
+        val manager = context.getSystemService(AlarmManager::class.java)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val now = ZonedDateTime.now()
+        for (time in getAlarmTimes(context)) {
+            // 清理旧版本没有 action 的闹钟。
+            cancelAlarm(context, time, null)
+            val lastFired = prefs.getString(LAST_FIRED_PREFIX + time, null)
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            val next = AlarmSchedule.nextTrigger(time, now, isWeekendEnabled(context), lastFired)
+                ?: continue
+            val triggerAt = next.toInstant().toEpochMilli()
+            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                action = ACTION_ALARM
+                putExtra(EXTRA_ALARM_TIME, time)
+                putExtra(EXTRA_TRIGGER_AT, triggerAt)
+            }
+            val operation = PendingIntent.getBroadcast(
+                context, time.hashCode(), intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (canScheduleExactAlarms(context)) {
+                try {
+                    manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, operation)
+                    Log.d("AlarmHelper", "Scheduled exact alarm: $time at $next")
+                    continue
+                } catch (error: SecurityException) {
+                    Log.w("AlarmHelper", "Exact alarm access unavailable", error)
                 }
             }
-            timeTickReceiver = receiver
-            val filter = IntentFilter().apply {
-                addAction(Intent.ACTION_TIME_TICK)
-                addAction(Intent.ACTION_TIME_CHANGED)
-            }
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    appContext.registerReceiver(
-                        receiver,
-                        filter,
-                        Context.RECEIVER_NOT_EXPORTED
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    appContext.registerReceiver(receiver, filter)
-                }
-                timeTickRegistered = true
-                Log.d("AlarmHelper", "Registered TIME_TICK / TIME_CHANGED for alarm slots")
-            } catch (e: Exception) {
-                timeTickReceiver = null
-                Log.e("AlarmHelper", "registerReceiver failed", e)
-            }
+            // 未授权时保留提醒能力；主界面明确提示可能延迟。
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, operation)
+            Log.w("AlarmHelper", "Scheduled inexact alarm: $time at $next")
         }
     }
 
-    private fun maybeUnregisterTimeTick(appContext: Context) {
-        synchronized(this) {
-            if (!timeTickRegistered) return
-            val r = timeTickReceiver ?: return
-            try {
-                appContext.unregisterReceiver(r)
-            } catch (_: IllegalArgumentException) {
-                // already unregistered
-            }
-            timeTickReceiver = null
-            timeTickRegistered = false
-            Log.d("AlarmHelper", "Unregistered TIME_TICK receiver (no alarm times)")
+    @Synchronized
+    fun claimAlarm(context: Context, time: String, triggerAt: Long): Boolean {
+        if (time !in getAlarmTimes(context)) return false
+        val now = ZonedDateTime.now()
+        if (!AlarmSchedule.isDeliveryValid(time, triggerAt, now, isWeekendEnabled(context))) {
+            return false
         }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val today = now.toLocalDate().toString()
+        val key = LAST_FIRED_PREFIX + time
+        if (prefs.getString(key, null) == today) return false
+        prefs.edit().putString(key, today).apply()
+        return true
     }
 
-    private fun onClockEvent(appContext: Context) {
-        val calendar = Calendar.getInstance()
-        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-        if (!isAlarmDay(appContext, dayOfWeek)) {
-            return
-        }
-
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
-        val minute = calendar.get(Calendar.MINUTE)
-        val timeStr = String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
-
-        val times = getAlarmTimes(appContext)
-        if (!times.contains(timeStr)) return
-
-        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val today = dayKeyFormat.format(calendar.time)
-        val lastKey = LAST_FIRED_PREFIX + timeStr
-        if (prefs.getString(lastKey, null) == today) return
-
-        prefs.edit().putString(lastKey, today).apply()
-
-        val broadcast = Intent(appContext, AlarmReceiver::class.java).apply {
-            putExtra("ALARM_TIME", timeStr)
-        }
-        appContext.sendBroadcast(broadcast)
-        Log.d("AlarmHelper", "Sent alarm broadcast for $timeStr")
-    }
-
-    private fun cancelAlarm(context: Context, time: String) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, AlarmReceiver::class.java)
-        val requestCode = time.hashCode()
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
+    private fun cancelAlarm(context: Context, time: String, action: String?) {
+        val intent = Intent(context, AlarmReceiver::class.java).setAction(action)
+        val operation = PendingIntent.getBroadcast(
+            context, time.hashCode(), intent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
-        if (pendingIntent != null) {
-            alarmManager.cancel(pendingIntent)
-        }
+        ) ?: return
+        context.getSystemService(AlarmManager::class.java).cancel(operation)
+        operation.cancel()
     }
 }
